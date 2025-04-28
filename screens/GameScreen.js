@@ -12,7 +12,7 @@ const devices = [
 
 const phishingMessages = [
   {
-    title: 'PHISHING ATTACK',
+    title: 'EMAIL',
     email: 'facebull@gmail.com',
     body: `Dear [Player 1],
 
@@ -23,7 +23,7 @@ We have detected unusu@l activity on your Facebook account and believe that your
 
 const legitMessages = [
   {
-    title: 'LEGITIMATE EMAIL',
+    title: ' EMAIL',
     email: 'support@amazon.com',
     body: `Dear Customer,
 
@@ -48,7 +48,7 @@ const GameScreen = ({ difficulty }) => {
           type: Math.floor(Math.random() * devices.length),
           x: Math.random() * (width - 100),
           y: Math.random() * (height - 100),
-          hasThreat: Math.random() < 0.5,
+          hasThreat: true, // Only spawn devices with threats
         },
       ]);
     }, difficulty === 'easy' ? 7000 : difficulty === 'medium' ? 5000 : 3000);
@@ -64,21 +64,25 @@ const GameScreen = ({ difficulty }) => {
           const message = isPhishing
             ? phishingMessages[Math.floor(Math.random() * phishingMessages.length)]
             : legitMessages[Math.floor(Math.random() * legitMessages.length)];
-          setCurrentMessage(message);
+          setCurrentMessage({ ...message, device }); // Pass the device to the modal
           setModalVisible(true);
           break;
         case 0: // Laptop
           Alert.alert('Scanning...', 'Antivirus is scanning for threats.');
           setTimeout(() => {
             Alert.alert('Scan Complete', 'Threat removed successfully!');
+            setSpawnedDevices((prevDevices) =>
+              prevDevices.filter((d) => d.id !== device.id)
+            );
           }, 3000); // Simulate a 3-second scan
           break;
         case 2: // Modem
-          setModalVisible(true);
           setCurrentMessage({
             title: 'Change Wi-Fi Password',
             body: 'Enter and confirm a new password to secure your modem.',
-          });
+            device,
+          }); // Pass the device to the modal
+          setModalVisible(true);
           break;
         default:
           Alert.alert('No threat detected on this device.');
@@ -87,12 +91,22 @@ const GameScreen = ({ difficulty }) => {
     }
   };
 
+  const handleModalClose = (device, success) => {
+    if (success) {
+      Alert.alert('Success', 'Threat resolved successfully!');
+    } else {
+      Alert.alert('Failure', 'Threat resolution failed!');
+    }
+    setSpawnedDevices((prevDevices) => prevDevices.filter((d) => d.id !== device.id));
+    setModalVisible(false);
+  };
+
   return (
     <ImageBackground source={require('../assets/game_background.png')} style={styles.background}>
       {spawnedDevices.map((device) => (
         <TouchableOpacity key={device.id} onPress={() => handleDeviceClick(device)}>
           <Image
-            source={device.hasThreat ? devices[device.type].threat : devices[device.type].normal}
+            source={devices[device.type].threat} // Only display threat icons
             style={[styles.device, { top: device.y, left: device.x }]}
           />
         </TouchableOpacity>
@@ -128,8 +142,7 @@ const GameScreen = ({ difficulty }) => {
                     title="Submit"
                     onPress={() => {
                       if (newPassword === confirmPassword) {
-                        Alert.alert('Success', 'Password changed successfully!');
-                        setModalVisible(false);
+                        handleModalClose(currentMessage.device, true);
                       } else {
                         Alert.alert('Error', 'Passwords do not match.');
                       }
@@ -142,11 +155,10 @@ const GameScreen = ({ difficulty }) => {
                     style={[styles.modalButton, { backgroundColor: '#32CD32' }]}
                     onPress={() => {
                       if (currentMessage.isPhishing) {
-                        Alert.alert('Correct!', 'You identified the phishing email.');
+                        handleModalClose(currentMessage.device, true);
                       } else {
-                        Alert.alert('Incorrect!', 'This was a legitimate email.');
+                        handleModalClose(currentMessage.device, false);
                       }
-                      setModalVisible(false);
                     }}
                   >
                     <Text style={styles.modalButtonText}>PHISHING</Text>
@@ -155,11 +167,10 @@ const GameScreen = ({ difficulty }) => {
                     style={[styles.modalButton, { backgroundColor: '#FF4500' }]}
                     onPress={() => {
                       if (!currentMessage.isPhishing) {
-                        Alert.alert('Correct!', 'You identified the legitimate email.');
+                        handleModalClose(currentMessage.device, true);
                       } else {
-                        Alert.alert('Incorrect!', 'This was a phishing email.');
+                        handleModalClose(currentMessage.device, false);
                       }
-                      setModalVisible(false);
                     }}
                   >
                     <Text style={styles.modalButtonText}>NOT</Text>
