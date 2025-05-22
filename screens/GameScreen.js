@@ -1,7 +1,74 @@
 import React, { useState, useEffect } from 'react';
-import { View, Image, ImageBackground, StyleSheet, Dimensions, TouchableOpacity, Alert, Text, Modal, Button, TextInput, Animated } from 'react-native';
+import { View, Image, ImageBackground, StyleSheet, Dimensions, TouchableOpacity, Alert, Text, Modal, Button, TextInput, Animated, ScrollView } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
+
+// Mock data for antivirus scanning
+const scanTypes = [
+  { id: 'quick', name: 'Quick Scan', duration: 2000, description: 'Scans common threat locations' },
+  { id: 'full', name: 'Full Scan', duration: 5000, description: 'Scans entire system' },
+  { id: 'custom', name: 'Custom Scan', duration: 3000, description: 'Scan selected locations' }
+];
+
+const mockFolders = [
+  { id: 'system32', name: 'System32', path: 'C:/Windows/System32' },
+  { id: 'programs', name: 'Program Files', path: 'C:/Program Files' },
+  { id: 'downloads', name: 'Downloads', path: 'C:/Users/Downloads' },
+  { id: 'temp', name: 'Temp', path: 'C:/Windows/Temp' },
+  { id: 'startup', name: 'Startup', path: 'C:/Users/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup' },
+  { id: 'documents', name: 'Documents', path: 'C:/Users/Documents' }
+];
+
+const commonFiles = [
+  { id: 1, name: 'setup.exe', type: 'safe', location: 'C:/Downloads', description: 'Legitimate installer' },
+  { id: 2, name: 'windows_update.tmp', type: 'safe', location: 'C:/Windows/Temp', description: 'System file' },
+  { id: 3, name: 'system_cleaner.exe', type: 'safe', location: 'C:/Program Files', description: 'Legitimate system utility' },
+  { id: 4, name: 'document.pdf', type: 'safe', location: 'C:/Documents', description: 'Regular document' },
+  { id: 5, name: 'system_driver.sys', type: 'safe', location: 'C:/Windows/System32', description: 'System driver' }
+];
+
+// Different sets of threats for different laptop scenarios
+const laptopThreatScenarios = [
+  // Scenario 1: Gaming laptop with mining malware
+  {
+    name: 'Gaming Laptop',
+    threats: [
+      { id: 1, name: 'crypto_miner.exe', type: 'malicious', location: 'C:/Program Files', description: 'Cryptocurrency mining malware' },
+      { id: 2, name: 'game_cheat.dll', type: 'malicious', location: 'C:/Program Files', description: 'Suspicious game modification tool' },
+      { id: 3, name: 'fake_driver.sys', type: 'malicious', location: 'C:/Windows/System32', description: 'Malicious driver file' }
+    ]
+  },
+  // Scenario 2: Business laptop with data stealer
+  {
+    name: 'Business Laptop',
+    threats: [
+      { id: 4, name: 'password_stealer.exe', type: 'malicious', location: 'C:/Temp', description: 'Suspicious file - may steal passwords' },
+      { id: 5, name: 'keylogger123.dll', type: 'malicious', location: 'C:/Program Files', description: 'Malicious DLL - may record keystrokes' },
+      { id: 6, name: 'data_exfil.exe', type: 'malicious', location: 'C:/Downloads', description: 'Suspicious data transfer program' }
+    ]
+  },
+  // Scenario 3: Student laptop with adware
+  {
+    name: 'Student Laptop',
+    threats: [
+      { id: 7, name: 'browser_extension.dll', type: 'malicious', location: 'C:/Program Files', description: 'Suspicious browser extension' },
+      { id: 8, name: 'adware_installer.exe', type: 'malicious', location: 'C:/Downloads', description: 'Adware installation program' },
+      { id: 9, name: 'fake_antivirus.exe', type: 'malicious', location: 'C:/Program Files', description: 'Malicious software disguised as antivirus' }
+    ]
+  },
+  // Scenario 4: Safe laptop (no threats)
+  {
+    name: 'Safe Laptop',
+    threats: []
+  }
+];
+
+const fakeAlerts = [
+  { id: 1, title: 'System Alert', message: 'Your system is at risk! Click here to fix now!', isMalicious: true },
+  { id: 2, title: 'Update Available', message: 'New virus definitions are available. Update now?', isMalicious: false },
+  { id: 3, title: 'Security Warning', message: 'Your antivirus is outdated! Click to update!', isMalicious: true },
+  { id: 4, title: 'System Optimization', message: 'Your system needs optimization. Click to scan!', isMalicious: true }
+];
 
 // Device assets (Normal and Threat Versions)
 const devices = [
@@ -18,7 +85,6 @@ const phishingMessages = [
     isPhishing: true,
     phishingElements: [
       { text: 'facebull@gmail.com', reason: 'Suspicious: This email uses "bull" instead of "book" - a common phishing tactic to trick users' },
-      { text: '[Player 1]', reason: 'Suspicious: Real companies address you by your actual name, not a placeholder' },
       { text: 'unusu@l', reason: 'Suspicious: Using special characters (@) to replace normal letters is a common phishing tactic' },
       { text: 'acC0unt', reason: 'Suspicious: Using numbers (0) to replace letters is a sign of phishing' },
       { text: 'pr0tect', reason: 'Suspicious: Another instance of number (0) replacing letter O' },
@@ -35,8 +101,6 @@ const phishingMessages = [
       { text: 'security@paypa1.com', reason: 'Suspicious: This email uses the number "1" instead of letter "l" in PayPal' },
       { text: 'URGENT', reason: 'Suspicious: Creating false urgency with capital letters is a common phishing tactic' },
       { text: 'PayPa1', reason: 'Suspicious: Misspelled brand name using number "1" instead of "l"' },
-      { text: 'Click here', reason: 'Suspicious: Legitimate companies provide actual links, not vague "click here" text' },
-      { text: 'permanently deleted', reason: 'Suspicious: Using threats of account deletion to create panic' },
     ]
   }
 ];
@@ -58,7 +122,21 @@ const GameScreen = ({ difficulty }) => {
   const [currentMessage, setCurrentMessage] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [scanProgress] = useState(new Animated.Value(0));
+  const [scanProgress, setScanProgress] = useState(0);
+  const [isScanning, setIsScanning] = useState(false);
+  const [identifiedElements, setIdentifiedElements] = useState([]);
+  const [showElementIdentification, setShowElementIdentification] = useState(false);
+  const [highlightedWord, setHighlightedWord] = useState(null);
+  const [scanningFiles, setScanningFiles] = useState([]);
+  const [scanIntervalId, setScanIntervalId] = useState(null);
+  const [showFakeAlert, setShowFakeAlert] = useState(false);
+  const [currentFakeAlert, setCurrentFakeAlert] = useState(null);
+  const [needsUpdate, setNeedsUpdate] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [showFileIdentification, setShowFileIdentification] = useState(false);
+  const [identifiedFiles, setIdentifiedFiles] = useState([]);
+  const [currentThreatFiles, setCurrentThreatFiles] = useState({ files: [], threats: [] });
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -70,6 +148,7 @@ const GameScreen = ({ difficulty }) => {
           x: Math.random() * (width - 100),
           y: Math.random() * (height - 100),
           hasThreat: true, // Only spawn devices with threats
+          scenarioIndex: Math.floor(Math.random() * laptopThreatScenarios.length), // Assign random scenario to laptop
         },
       ]);
     }, difficulty === 'easy' ? 7000 : difficulty === 'medium' ? 5000 : 3000);
@@ -77,9 +156,42 @@ const GameScreen = ({ difficulty }) => {
     return () => clearInterval(interval);
   }, [difficulty]);
 
+  const resetStates = () => {
+    setScanProgress(0);
+    setScanningFiles([]);
+    setShowFileIdentification(false);
+    setIdentifiedFiles([]);
+    setCurrentThreatFiles({ files: [], threats: [] });
+    setNeedsUpdate(false);
+    setIsUpdating(false);
+    setUpdateProgress(0);
+    setModalVisible(false);
+    setCurrentMessage(null);
+  };
+
   const handleDeviceClick = (device) => {
     if (device.hasThreat) {
+      resetStates();
       switch (device.type) {
+        case 0: // Laptop
+          setCurrentMessage({
+            title: 'Antivirus',
+            body: 'Checking for updates...',
+            device,
+            type: 'update_check'
+          });
+          setModalVisible(true);
+          
+          setTimeout(() => {
+            setCurrentMessage({
+              title: 'Antivirus',
+              body: 'Updates available. Would you like to update now?',
+              device,
+              type: 'update_prompt'
+            });
+          }, 1500);
+          break;
+
         case 1: // Phone
           const isPhishing = Math.random() < 0.7; // 70% chance for phishing
           const messages = isPhishing ? phishingMessages : legitMessages;
@@ -87,22 +199,12 @@ const GameScreen = ({ difficulty }) => {
           setCurrentMessage({ ...messages[randomIndex], device });
           setModalVisible(true);
           break;
-        case 0: // Laptop
-          setCurrentMessage({
-            title: 'Antivirus',
-            body: 'Scanning for threats...',
-            device,
-            type: 'scan'
-          });
-          setModalVisible(true);
-          startScanAnimation();
-          break;
         case 2: // Modem
           setCurrentMessage({
             title: 'Change Wi-Fi Password',
             body: 'Enter and confirm a new password to secure your modem.',
             device,
-          }); // Pass the device to the modal
+          });
           setModalVisible(true);
           break;
         default:
@@ -112,23 +214,95 @@ const GameScreen = ({ difficulty }) => {
     }
   };
 
-  const startScanAnimation = () => {
-    Animated.timing(scanProgress, {
-      toValue: 1,
-      duration: 3000, // 3 seconds to complete
-      useNativeDriver: false
-    }).start(({ finished }) => {
-      if (finished) {
-        // Animation completed, close modal and remove device
-        setTimeout(() => {
-          handleModalClose(currentMessage.device, true, 'Scan completed successfully!');
-        }, 200);
-      }
-    });
+  const handleUpdate = () => {
+    setIsUpdating(true);
+    setUpdateProgress(0);
+
+    const updateInterval = setInterval(() => {
+      setUpdateProgress(prev => {
+        const newProgress = prev + 0.05; // Increment by 5% each time
+        if (newProgress >= 1) {
+          clearInterval(updateInterval);
+          setIsUpdating(false);
+          Alert.alert(
+            'Update Complete',
+            'Antivirus has been successfully updated to the latest version.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  setCurrentMessage({
+                    title: 'Antivirus',
+                    body: 'Scanning for threats...',
+                    device: currentMessage.device,
+                    type: 'scan'
+                  });
+                  startScanningProcess(currentMessage.device);
+                }
+              }
+            ]
+          );
+        }
+        return newProgress;
+      });
+    }, 200);
+  };
+
+  const handleFileIdentification = (file, action) => {
+    // Check if this file is already identified
+    const isAlreadyIdentified = identifiedFiles.some(f => f.id === file.id);
+    
+    if (!isAlreadyIdentified) {
+      // Add only the current file to identified files
+      setIdentifiedFiles(prevFiles => {
+        const updatedFiles = [...prevFiles, { ...file, action }];
+        
+        // Check if all files have been identified after this update
+        if (updatedFiles.length === currentThreatFiles.files.length) {
+          // Calculate correct identifications
+          const correctIdentifications = updatedFiles.filter(f => {
+            const isThreat = currentThreatFiles.threats.some(t => t.id === f.id);
+            return (isThreat && f.action === 'remove') || (!isThreat && f.action === 'ignore');
+          }).length;
+
+          const totalFiles = currentThreatFiles.files.length;
+          const accuracy = Math.round((correctIdentifications / totalFiles) * 100);
+          
+          // Reset states
+          setTimeout(() => {
+            setShowFileIdentification(false);
+            setIdentifiedFiles([]);
+            setCurrentThreatFiles({ files: [], threats: [] });
+            setScanProgress(0);
+            setScanningFiles([]);
+            setShowElementIdentification(false);
+            setHighlightedWord(null);
+            
+            // Close modal and show results
+            handleModalClose(
+              currentMessage.device,
+              true,
+              `Scan completed!\nCorrectly identified ${correctIdentifications} out of ${totalFiles} files (${accuracy}% accuracy).`
+            );
+          }, 500);
+        }
+        
+        return updatedFiles;
+      });
+    }
   };
 
   const handleModalClose = (device, success, message) => {
+    if (currentMessage?.isPhishing && success && !showElementIdentification) {
+      // If it's a phishing email and user correctly identified it, show element identification
+      setShowElementIdentification(true);
+      return;
+    }
+
     setModalVisible(false);
+    setShowElementIdentification(false);
+    setIdentifiedFiles([]);
+    setCurrentThreatFiles({ files: [], threats: [] });
     setTimeout(() => {
       Alert.alert(
         success ? 'Success' : 'Incorrect',
@@ -139,6 +313,152 @@ const GameScreen = ({ difficulty }) => {
         prevDevices.filter((d) => d.id !== device.id)
       );
     }, 500);
+  };
+
+  const checkIdentifiedElements = () => {
+    if (!currentMessage?.phishingElements) return false;
+    
+    // Check if all phishing elements have been identified
+    const allElementsIdentified = currentMessage.phishingElements.every(element =>
+      identifiedElements.some(identified => identified.text === element.text)
+    );
+
+    if (allElementsIdentified) {
+      handleModalClose(currentMessage.device, true, 'Great job! You identified all suspicious elements!');
+    } else {
+      Alert.alert(
+        'Not Complete',
+        'Please identify all suspicious elements in the email.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleWordClick = (word, index) => {
+    if (!showElementIdentification) return;
+
+    const cleanWord = word.replace(/[.,!?]$/g, '');
+    
+    // First check if the clicked word is part of the email address
+    if (currentMessage.email.toLowerCase().includes(cleanWord.toLowerCase())) {
+      const emailElement = currentMessage.phishingElements?.find(e => 
+        e.text.toLowerCase() === currentMessage.email.toLowerCase()
+      );
+      if (emailElement && !identifiedElements.some(e => e.text === emailElement.text)) {
+        setIdentifiedElements([...identifiedElements, emailElement]);
+        return;
+      }
+    }
+
+    // Then check for other phishing elements
+    const phishingElement = currentMessage.phishingElements?.find(
+      element => {
+        // Check for exact match
+        if (element.text.toLowerCase() === cleanWord.toLowerCase()) {
+          return true;
+        }
+        
+        // Check if the word is part of a longer phrase
+        if (currentMessage.body.toLowerCase().includes(element.text.toLowerCase())) {
+          const phrase = element.text.toLowerCase();
+          const startIndex = currentMessage.body.toLowerCase().indexOf(phrase);
+          const endIndex = startIndex + phrase.length;
+          const currentWordStart = currentMessage.body.toLowerCase().indexOf(cleanWord.toLowerCase());
+          
+          return currentWordStart >= startIndex && currentWordStart < endIndex;
+        }
+        
+        return false;
+      }
+    );
+
+    if (phishingElement) {
+      if (!identifiedElements.some(e => e.text === phishingElement.text)) {
+        setIdentifiedElements([...identifiedElements, phishingElement]);
+      }
+    }
+  };
+
+  const startScan = (device) => {
+    // Always show warning when scanning without update
+    Alert.alert(
+      'Warning',
+      'Scanning without updating may miss new threats. Are you sure you want to continue?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Continue',
+          onPress: () => {
+            setCurrentMessage({
+              title: 'Antivirus',
+              body: 'Scanning for threats...',
+              device,
+              type: 'scan'
+            });
+            startScanningProcess(device);
+          }
+        }
+      ]
+    );
+  };
+
+  const startScanningProcess = (device) => {
+    // Reset all states before starting new scan
+    setScanningFiles([]);
+    setScanProgress(0);
+    setIdentifiedFiles([]);
+    setShowFileIdentification(false);
+    setCurrentThreatFiles({ files: [], threats: [] });
+
+    // Determine if laptop is safe or unsafe
+    const isSafe = Math.random() < 0.3; // 30% chance of being safe
+    const scenario = laptopThreatScenarios[Math.floor(Math.random() * laptopThreatScenarios.length)];
+    
+    // Create a mixed list of safe and unsafe files
+    const mixedFiles = [
+      ...scenario.threats,
+      ...commonFiles.slice(0, 3) // Add some safe files
+    ].sort(() => Math.random() - 0.5); // Randomize the order
+
+    // Update scanning files display
+    const interval = setInterval(() => {
+      setScanProgress(prev => {
+        const newProgress = prev + 0.02; // Increment by 2% each time
+        if (newProgress >= 1) {
+          clearInterval(interval);
+          setTimeout(() => {
+            if (isSafe) {
+              handleModalClose(device, true, 'Scan completed! No threats found. This laptop is safe.');
+            } else {
+              // Store both the files and the scenario information
+              setCurrentThreatFiles({
+                files: mixedFiles,
+                threats: scenario.threats
+              });
+              setShowFileIdentification(true);
+              setCurrentMessage({
+                title: 'Antivirus',
+                body: 'Files scanned. Please identify which files are safe and which are threats.',
+                device,
+                type: 'file_identification'
+              });
+            }
+          }, 500);
+        }
+        return newProgress;
+      });
+
+      setScanningFiles(prev => {
+        const newFiles = [...prev];
+        if (newFiles.length > 5) newFiles.shift();
+        const randomFolder = mockFolders[Math.floor(Math.random() * mockFolders.length)];
+        newFiles.push(`Scanning ${randomFolder.path}...`);
+        return newFiles;
+      });
+    }, 140);
   };
 
   return (
@@ -152,7 +472,6 @@ const GameScreen = ({ difficulty }) => {
         </TouchableOpacity>
       ))}
 
-      {/* Phishing/Legit Message Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -162,174 +481,341 @@ const GameScreen = ({ difficulty }) => {
         <View style={styles.modalView}>
           {currentMessage && (
             <>
-              {currentMessage.type === 'scan' ? (
-                // Laptop antivirus scanning view
-                <View style={styles.phoneFrame}>
-                  <View style={styles.phoneHeader}>
-                    <Text style={styles.headerText}>Antivirus Scanner</Text>
-                  </View>
-                  <View style={styles.scanContainer}>
-                    <Text style={styles.scanText}>{currentMessage.body}</Text>
-                    <View style={styles.progressBar}>
-                      <Animated.View 
-                        style={[
-                          styles.progress,
-                          {
-                            width: scanProgress.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: ['0%', '100%']
-                            })
-                          }
-                        ]} 
-                      />
-                    </View>
-                  </View>
-                </View>
-              ) : currentMessage.title === 'Change Wi-Fi Password' ? (
-                // Modem password change view
-                <View style={styles.phoneFrame}>
-                  <View style={styles.phoneHeader}>
-                    <Text style={styles.headerText}>Wi-Fi Security</Text>
-                  </View>
-                  <View style={styles.passwordContainer}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter new password"
-                      secureTextEntry
-                      value={newPassword}
-                      onChangeText={setNewPassword}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Confirm new password"
-                      secureTextEntry
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                    />
-                    <TouchableOpacity
-                      style={[styles.actionButton, { backgroundColor: '#4CD964', width: '100%' }]}
-                      onPress={() => {
-                        if (newPassword === confirmPassword && newPassword.length >= 8) {
-                          handleModalClose(currentMessage.device, true, 'Password changed successfully!');
-                          setNewPassword('');
-                          setConfirmPassword('');
-                        } else {
-                          Alert.alert(
-                            'Error',
-                            'Passwords must match and be at least 8 characters long'
-                          );
-                        }
-                      }}
-                    >
-                      <Text style={styles.buttonText}>Change Password</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                // Email phishing detection view
-                <>
+              <ScrollView contentContainerStyle={styles.modalScrollContent} style={{width: '100%'}}>
+                {currentMessage.type === 'update_check' ? (
                   <View style={styles.phoneFrame}>
                     <View style={styles.phoneHeader}>
-                      <Text style={styles.headerText}>Email</Text>
+                      <Text style={styles.headerText}>Checking for Updates</Text>
                     </View>
-                    <TouchableOpacity 
-                      onPress={() => {
-                        if (currentMessage.isPhishing) {
-                          const emailElement = currentMessage.phishingElements?.find(e => e.text === currentMessage.email);
-                          if (emailElement) {
-                            Alert.alert('Suspicious Element', emailElement.reason);
-                          }
-                        }
-                      }}
-                    >
-                      <Text style={[
-                        styles.emailText,
-                        currentMessage.isPhishing && styles.clickableText
-                      ]}>
-                        {currentMessage.email}
+                    <View style={styles.scanningContainer}>
+                      <Text style={styles.scanningTitle}>Checking antivirus database...</Text>
+                      <View style={styles.progressBarContainer}>
+                        <View style={styles.progressBar}>
+                          <View style={[styles.progress, { width: '100%' }]} />
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ) : currentMessage.type === 'update_prompt' ? (
+                  <View style={styles.phoneFrame}>
+                    <View style={styles.phoneHeader}>
+                      <Text style={styles.headerText}>Update Available</Text>
+                    </View>
+                    <View style={styles.scanningContainer}>
+                      <Text style={styles.scanningTitle}>New virus definitions available</Text>
+                      {isUpdating ? (
+                        <View style={styles.progressBarContainer}>
+                          <View style={styles.progressBar}>
+                            <View style={[styles.progress, { width: `${updateProgress * 100}%` }]} />
+                          </View>
+                          <Text style={styles.progressText}>
+                            {Math.round(updateProgress * 100)}%
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.buttonContainer}>
+                          <TouchableOpacity
+                            style={[styles.actionButton, { backgroundColor: '#4CD964' }]}
+                            onPress={handleUpdate}
+                          >
+                            <Text style={styles.buttonText}>UPDATE NOW</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+                            onPress={() => startScan(currentMessage.device)}
+                          >
+                            <Text style={styles.buttonText}>SCAN WITHOUT UPDATE</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ) : currentMessage.type === 'file_identification' ? (
+                  <View style={styles.phoneFrame}>
+                    <View style={styles.phoneHeader}>
+                      <Text style={styles.headerText}>Threat Detection</Text>
+                    </View>
+                    <View style={styles.scanningContainer}>
+                      <Text style={styles.scanningTitle}>Suspicious Files Found</Text>
+                      <ScrollView style={styles.threatFilesList}>
+                        {currentThreatFiles.files.map((file, index) => {
+                          const fileIdentification = identifiedFiles.find(f => f.id === file.id);
+                          const isIdentified = !!fileIdentification;
+                          
+                          return (
+                            <View key={index} style={styles.threatFileItem}>
+                              <View style={styles.threatFileInfo}>
+                                <Text style={styles.threatFileName}>{file.name}</Text>
+                                <Text style={styles.threatFileLocation}>{file.location}</Text>
+                                <Text style={styles.threatFileDescription}>{file.description}</Text>
+                              </View>
+                              {!isIdentified ? (
+                                <View style={styles.threatFileActions}>
+                                  <TouchableOpacity
+                                    style={[styles.threatFileButton, { backgroundColor: '#4CD964' }]}
+                                    onPress={() => handleFileIdentification(file, 'ignore')}
+                                  >
+                                    <Text style={styles.buttonText}>SAFE</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={[styles.threatFileButton, { backgroundColor: '#FF3B30' }]}
+                                    onPress={() => handleFileIdentification(file, 'remove')}
+                                  >
+                                    <Text style={styles.buttonText}>THREAT</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ) : (
+                                <View style={styles.threatFileStatus}>
+                                  <Text style={[
+                                    styles.threatFileStatusText,
+                                    { color: fileIdentification.action === 'remove' ? '#FF3B30' : '#4CD964' }
+                                  ]}>
+                                    {fileIdentification.action === 'remove' ? 'MARKED AS THREAT' : 'MARKED AS SAFE'}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  </View>
+                ) : currentMessage.type === 'scan' ? (
+                  <View style={styles.phoneFrame}>
+                    <View style={styles.phoneHeader}>
+                      <Text style={styles.headerText}>Antivirus Scanner</Text>
+                    </View>
+                    <View style={styles.scanningContainer}>
+                      <Text style={styles.scanningTitle}>Scanning in Progress</Text>
+                      <View style={styles.progressBarContainer}>
+                        <View style={styles.progressBar}>
+                          <View style={[styles.progress, { width: `${scanProgress * 100}%` }]} />
+                        </View>
+                        <Text style={styles.progressText}>
+                          {Math.round(scanProgress * 100)}%
+                        </Text>
+                      </View>
+                      <Text style={styles.scanningStatus}>
+                        Files scanned: {Math.round(scanProgress * 1000)}
                       </Text>
-                    </TouchableOpacity>
-                    
-                    <View style={styles.messageContainer}>
-                      {currentMessage.body.split(' ').map((word, index) => {
-                        // Clean the word from punctuation
-                        const cleanWord = word.replace(/[.,!?]$/g, '');
-                        
-                        const phishingElement = currentMessage.phishingElements?.find(
-                          element => {
-                            // Check for exact match
-                            if (element.text.toLowerCase() === cleanWord.toLowerCase()) {
+                      {scanningFiles.length > 0 && (
+                        <ScrollView style={styles.scanningFilesList}>
+                          {scanningFiles.map((file, index) => (
+                            <Text key={index} style={styles.scanningFile}>{file}</Text>
+                          ))}
+                        </ScrollView>
+                      )}
+                    </View>
+                  </View>
+                ) : currentMessage.title === 'Change Wi-Fi Password' ? (
+                  // Modem password change view
+                  <View style={styles.phoneFrame}>
+                    <View style={styles.phoneHeader}>
+                      <Text style={styles.headerText}>Wi-Fi Security</Text>
+                    </View>
+                    <View style={styles.passwordContainer}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter new password"
+                        secureTextEntry
+                        value={newPassword}
+                        onChangeText={setNewPassword}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Confirm new password"
+                        secureTextEntry
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                      />
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: '#4CD964', width: '100%' }]}
+                        onPress={() => {
+                          if (newPassword === confirmPassword && newPassword.length >= 8) {
+                            handleModalClose(currentMessage.device, true, 'Password changed successfully!');
+                            setNewPassword('');
+                            setConfirmPassword('');
+                          } else {
+                            Alert.alert(
+                              'Error',
+                              'Passwords must match and be at least 8 characters long'
+                            );
+                          }
+                        }}
+                      >
+                        <Text style={styles.buttonText}>Change Password</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  // Email phishing detection view
+                  <>
+                    <View style={styles.phoneFrame}>
+                      <View style={styles.phoneHeader}>
+                        <Text style={styles.headerText}>Email</Text>
+                      </View>
+                      <TouchableOpacity 
+                        onPress={() => {
+                          if (currentMessage.isPhishing) {
+                            const emailElement = currentMessage.phishingElements?.find(e => 
+                              e.text.toLowerCase() === currentMessage.email.toLowerCase()
+                            );
+                            if (emailElement && !identifiedElements.some(e => e.text === emailElement.text)) {
+                              setIdentifiedElements([...identifiedElements, emailElement]);
+                            }
+                          }
+                        }}
+                      >
+                        <Text style={[
+                          styles.emailText,
+                          currentMessage.isPhishing && styles.clickableText,
+                          identifiedElements.some(e => e.text.toLowerCase() === currentMessage.email.toLowerCase()) && styles.wordIdentifiedText
+                        ]}>
+                          {currentMessage.email}
+                        </Text>
+                      </TouchableOpacity>
+                      <View style={styles.messageContainer}>
+                        {currentMessage.body.split(' ').map((word, index) => {
+                          const cleanWord = word.replace(/[.,!?]$/g, '');
+                          const isHighlighted = highlightedWord === cleanWord;
+                          const isIdentified = identifiedElements.some(e => {
+                            if (e.text.toLowerCase() === cleanWord.toLowerCase()) {
                               return true;
                             }
-                            
-                            // Check for phrases (multiple words)
-                            if (currentMessage.body.toLowerCase().includes(element.text.toLowerCase())) {
-                              const phrase = element.text.toLowerCase();
+                            if (currentMessage.body.toLowerCase().includes(e.text.toLowerCase())) {
+                              const phrase = e.text.toLowerCase();
                               const startIndex = currentMessage.body.toLowerCase().indexOf(phrase);
                               const endIndex = startIndex + phrase.length;
                               const currentWordStart = currentMessage.body.toLowerCase().indexOf(cleanWord.toLowerCase());
-                              
                               return currentWordStart >= startIndex && currentWordStart < endIndex;
                             }
-                            
                             return false;
-                          }
-                        );
-                        
-                        return (
-                          <TouchableOpacity
-                            key={index}
-                            onPress={() => {
-                              if (phishingElement) {
-                                Alert.alert('Suspicious Element Found!', phishingElement.reason);
-                              }
-                            }}
-                            style={styles.wordWrapper}
-                          >
-                            <Text style={styles.messageText}>
-                              {word}{' '}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
+                          });
+                          return (
+                            <TouchableOpacity
+                              key={index}
+                              onPress={() => handleWordClick(word, index)}
+                              style={[
+                                styles.wordWrapper,
+                                isHighlighted && styles.wordHighlighted,
+                                isIdentified && styles.wordIdentified
+                              ]}
+                            >
+                              <Text style={[
+                                styles.messageText,
+                                isHighlighted && styles.wordHighlightedText,
+                                isIdentified && styles.wordIdentifiedText
+                              ]}>
+                                {word}{' '}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                     </View>
-                  </View>
-
-                  <View style={styles.buttonContainer}>
-                    <TouchableOpacity
-                      style={[styles.actionButton, { backgroundColor: '#4CD964' }]}
-                      onPress={() => {
-                        if (currentMessage.isPhishing) {
-                          handleModalClose(currentMessage.device, true, 
-                            'Correct! This is a phishing attempt. Look for suspicious elements.');
-                        } else {
-                          handleModalClose(currentMessage.device, false, 
-                            'Incorrect! This was a legitimate message.');
-                        }
-                      }}
-                    >
-                      <Text style={styles.buttonText}>PHISHING</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
-                      onPress={() => {
-                        if (!currentMessage.isPhishing) {
-                          handleModalClose(currentMessage.device, true, 
-                            'Correct! This was a legitimate message.');
-                        } else {
-                          handleModalClose(currentMessage.device, false, 
-                            'Incorrect! This was a phishing attempt. Try to spot the suspicious elements.');
-                        }
-                      }}
-                    >
-                      <Text style={styles.buttonText}>NOT PHISHING</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
+                    {showElementIdentification && (
+                      <View style={styles.elementIdentificationContainer}>
+                        <Text style={styles.elementIdentificationTitle}>
+                          Find all suspicious elements in the email
+                        </Text>
+                        <ScrollView 
+                          style={styles.identifiedElementsScroll}
+                          contentContainerStyle={styles.identifiedElementsContent}
+                        >
+                          {currentMessage.phishingElements.map((element, index) => {
+                            const isIdentified = identifiedElements.some(e => e.text === element.text);
+                            return (
+                              <View 
+                                key={index} 
+                                style={[
+                                  styles.identifiedElement,
+                                  isIdentified && styles.identifiedElementHighlighted
+                                ]}
+                              >
+                                <Text style={[
+                                  styles.identifiedElementText,
+                                  isIdentified && styles.identifiedElementTextHighlighted
+                                ]}>
+                                  {isIdentified ? element.text : '?'}
+                                </Text>
+                                <Text style={styles.identifiedElementReason}>
+                                  {isIdentified ? element.reason : 'Find this element'}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
+                    <View style={styles.buttonContainerSticky}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: '#4CD964' }]}
+                        onPress={() => {
+                          if (currentMessage.isPhishing) {
+                            if (!showElementIdentification) {
+                              setShowElementIdentification(true);
+                            } else {
+                              checkIdentifiedElements();
+                            }
+                          } else {
+                            handleModalClose(currentMessage.device, false, 
+                              'Incorrect! This was a legitimate message.');
+                          }
+                        }}
+                      >
+                        <Text style={styles.buttonText}>
+                          {showElementIdentification ? 'SUBMIT IDENTIFIED ELEMENTS' : 'PHISHING'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+                        onPress={() => {
+                          if (!currentMessage.isPhishing) {
+                            handleModalClose(currentMessage.device, true, 
+                              'Correct! This was a legitimate message.');
+                          } else {
+                            handleModalClose(currentMessage.device, false, 
+                              'Incorrect! This was a phishing attempt. Try to spot the suspicious elements.');
+                          }
+                        }}
+                      >
+                        <Text style={styles.buttonText}>NOT PHISHING</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </ScrollView>
             </>
           )}
+        </View>
+      </Modal>
+
+      {/* Fake Alert Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showFakeAlert}
+        onRequestClose={() => setShowFakeAlert(false)}
+      >
+        <View style={styles.alertModalContainer}>
+          <View style={styles.alertModalContent}>
+            <Text style={styles.alertTitle}>{currentFakeAlert?.title}</Text>
+            <Text style={styles.alertMessage}>{currentFakeAlert?.message}</Text>
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, { backgroundColor: '#4CD964' }]}
+                onPress={() => handleFakeAlertResponse(true)}
+              >
+                <Text style={styles.buttonText}>OK</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.alertButton, { backgroundColor: '#FF3B30' }]}
+                onPress={() => handleFakeAlertResponse(false)}
+              >
+                <Text style={styles.buttonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </ImageBackground>
@@ -342,8 +828,8 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   device: {
-    width: 150,
-    height: 150,
+    width: width * 0.3,
+    height: width * 0.3,
     position: 'absolute',
   },
   modalView: {
@@ -351,131 +837,304 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    padding: 20,
+    padding: width * 0.01,
+    marginTop: height * 0.1,
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 10,
-  },
-  modalEmail: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    backgroundColor: '#fff',
-    padding: 5,
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  modalBody: {
-    fontSize: 16,
-    color: '#000', 
-    backgroundColor: '#fff',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '80%',
-  },
-  modalButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    marginHorizontal: 10,
-  },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  input: {
-    width: '100%',
-    height: 40,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginBottom: 10,
+  modalScrollContent: {
+    alignItems: 'center',
+    paddingBottom: height * 0.15,
+    justifyContent: 'center',
   },
   phoneFrame: {
-    width: '90%',
+    width: '95%',
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 15,
-    marginBottom: 20,
+    borderRadius: 15,
+    padding: width * 0.04,
+    marginBottom: height * 0.02,
+    maxHeight: height * 0.5,
+    marginTop: height * 0.05,
   },
   phoneHeader: {
     backgroundColor: '#f2f2f2',
-    padding: 10,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    padding: width * 0.03,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
   },
   headerText: {
-    fontSize: 18,
+    fontSize: width * 0.05,
     fontWeight: 'bold',
     color: '#333',
   },
   emailText: {
-    fontSize: 16,
+    fontSize: width * 0.04,
     color: '#333',
-    marginBottom: 10,
+    marginBottom: height * 0.01,
+    padding: width * 0.02,
   },
-  messageText: {
-    fontSize: 16,
-    color: '#000',
-    lineHeight: 24,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '80%',
-  },
-  actionButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    marginHorizontal: 10,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  scanContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  scanText: {
-    fontSize: 18,
-    color: '#333',
-    marginBottom: 20,
-  },
-  progressBar: {
-    width: '100%',
-    height: 10,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 5,
-    overflow: 'hidden',
-  },
-  progress: {
-    height: '100%',
-    backgroundColor: '#4CD964',
-    animation: 'progress 2s infinite linear',
-  },
-  passwordContainer: {
-    padding: 20,
-    width: '100%',
-    alignItems: 'center',
+  clickableText: {
+    textDecorationLine: 'underline',
+    color: '#0066cc',
   },
   messageContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 15,
+    padding: width * 0.03,
+    maxHeight: height * 0.35,
+    alignItems: 'flex-start',
   },
   wordWrapper: {
-    marginRight: 4,
+    marginRight: 2,
+    padding: 4,
+    borderRadius: 4,
+    minWidth: width * 0.05,
+  },
+  wordHighlighted: {
+    backgroundColor: '#90EE90',
+    transform: [{ scale: 1.1 }],
+  },
+  wordIdentified: {
+    backgroundColor: '#90EE90',
+  },
+  wordHighlightedText: {
+    color: '#000',
+    fontWeight: 'bold',
+  },
+  wordIdentifiedText: {
+    color: '#006400',
+    fontWeight: 'bold',
+    backgroundColor: '#90EE90',
+    borderRadius: 4,
+  },
+  messageText: {
+    fontSize: width * 0.035,
+    color: '#000',
+    lineHeight: width * 0.05,
+  },
+  buttonContainerSticky: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '95%',
+    position: 'absolute',
+    bottom: height * 0.02,
+    left: '2.5%',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    zIndex: 10,
+  },
+  actionButton: {
+    paddingVertical: height * 0.012,
+    paddingHorizontal: width * 0.03,
+    borderRadius: 10,
+    marginHorizontal: width * 0.01,
+    minWidth: width * 0.35,
+    maxWidth: width * 0.45,
+  },
+  buttonText: {
+    fontSize: width * 0.032,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  elementIdentificationContainer: {
+    width: '95%',
+    padding: width * 0.02,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 10,
+    marginTop: height * 0.01,
+    maxHeight: height * 0.25,
+  },
+  elementIdentificationTitle: {
+    fontSize: width * 0.035,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: height * 0.005,
+    textAlign: 'center',
+  },
+  identifiedElementsScroll: {
+    maxHeight: height * 0.2,
+    width: '100%',
+  },
+  identifiedElementsContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: width * 0.01,
+    paddingBottom: height * 0.01,
+  },
+  identifiedElement: {
+    backgroundColor: '#fff',
+    padding: width * 0.02,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    width: '48%',
+    minWidth: width * 0.35,
+    maxWidth: width * 0.45,
+  },
+  identifiedElementHighlighted: {
+    backgroundColor: '#90EE90',
+    borderColor: '#006400',
+  },
+  identifiedElementText: {
+    fontSize: width * 0.03,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 2,
+  },
+  identifiedElementTextHighlighted: {
+    color: '#006400',
+  },
+  identifiedElementReason: {
+    fontSize: width * 0.025,
+    color: '#666',
+  },
+  scanningContainer: {
+    padding: width * 0.04,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanningTitle: {
+    fontSize: width * 0.04,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: height * 0.02,
+  },
+  scanningFilesList: {
+    maxHeight: height * 0.3,
+    width: '100%',
+    marginTop: 15,
+  },
+  scanningFile: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+    paddingHorizontal: 10,
+  },
+  progressBarContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginVertical: 15,
+  },
+  progressText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 8,
+  },
+  passwordContainer: {
+    padding: width * 0.04,
+    width: '100%',
+    alignItems: 'center',
+  },
+  input: {
+    width: '100%',
+    height: height * 0.05,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 5,
+    paddingHorizontal: width * 0.03,
+    marginBottom: height * 0.01,
+    fontSize: width * 0.035,
+  },
+  scanningStatus: {
+    fontSize: width * 0.035,
+    color: '#333',
+    marginTop: height * 0.01,
+    marginBottom: height * 0.01,
+  },
+  alertModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  alertModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: width * 0.04,
+    width: '80%',
+    alignItems: 'center',
+  },
+  alertTitle: {
+    fontSize: width * 0.04,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: height * 0.01,
+  },
+  alertMessage: {
+    fontSize: width * 0.035,
+    color: '#666',
+    marginBottom: height * 0.02,
+    textAlign: 'center',
+  },
+  alertButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  alertButton: {
+    paddingVertical: height * 0.01,
+    paddingHorizontal: width * 0.04,
+    borderRadius: 5,
+    minWidth: width * 0.2,
+  },
+  threatFilesList: {
+    maxHeight: height * 0.4,
+    width: '100%',
+    marginTop: 15,
+  },
+  threatFileItem: {
+    backgroundColor: '#f8f8f8',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  threatFileInfo: {
+    marginBottom: 10,
+  },
+  threatFileName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  threatFileLocation: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  threatFileDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  threatFileActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  threatFileButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    minWidth: 100,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 20,
+  },
+  threatFileStatus: {
+    marginTop: 10,
+    padding: 5,
+    borderRadius: 5,
+    backgroundColor: '#f8f8f8',
+  },
+  threatFileStatusText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
 
