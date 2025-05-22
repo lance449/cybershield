@@ -171,7 +171,21 @@ const GameScreen = ({ difficulty }) => {
 
   const handleDeviceClick = (device) => {
     if (device.hasThreat) {
-      resetStates();
+      // Reset all states before starting new interaction
+      setScanProgress(0);
+      setScanningFiles([]);
+      setShowFileIdentification(false);
+      setIdentifiedFiles([]);
+      setCurrentThreatFiles({ files: [], threats: [] });
+      setNeedsUpdate(false);
+      setIsUpdating(false);
+      setUpdateProgress(0);
+      setModalVisible(false);
+      setCurrentMessage(null);
+      setShowElementIdentification(false);
+      setIdentifiedElements([]);
+      setHighlightedWord(null);
+
       switch (device.type) {
         case 0: // Laptop
           setCurrentMessage({
@@ -199,6 +213,7 @@ const GameScreen = ({ difficulty }) => {
           setCurrentMessage({ ...messages[randomIndex], device });
           setModalVisible(true);
           break;
+
         case 2: // Modem
           setCurrentMessage({
             title: 'Change Wi-Fi Password',
@@ -207,6 +222,7 @@ const GameScreen = ({ difficulty }) => {
           });
           setModalVisible(true);
           break;
+
         default:
           Alert.alert('No threat detected on this device.');
           break;
@@ -293,16 +309,17 @@ const GameScreen = ({ difficulty }) => {
   };
 
   const handleModalClose = (device, success, message) => {
-    if (currentMessage?.isPhishing && success && !showElementIdentification) {
-      // If it's a phishing email and user correctly identified it, show element identification
-      setShowElementIdentification(true);
-      return;
-    }
-
+    // Reset all states when closing modal
     setModalVisible(false);
     setShowElementIdentification(false);
+    setIdentifiedElements([]);
     setIdentifiedFiles([]);
     setCurrentThreatFiles({ files: [], threats: [] });
+    setScanProgress(0);
+    setScanningFiles([]);
+    setShowFileIdentification(false);
+    setHighlightedWord(null);
+
     setTimeout(() => {
       Alert.alert(
         success ? 'Success' : 'Incorrect',
