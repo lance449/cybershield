@@ -3,7 +3,7 @@ import { StyleSheet, SafeAreaView } from 'react-native';
 import GameScreen from './screens/GameScreen';
 import StartScreen from './screens/StartScreen';
 import DifficultyScreen from './screens/DifficultyScreen'; // Import the new DifficultyScreen
-import SettingsScreen from './screens/SettingsScreen';
+import HowToPlayScreen from './screens/HowToPlayScreen';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('start'); // Manage the current screen
@@ -14,7 +14,7 @@ export default function App() {
       {currentScreen === 'start' ? (
         <StartScreen
           onNavigateToDifficulty={() => setCurrentScreen('difficulty')} // Navigate to DifficultyScreen
-          onOpenSettings={() => setCurrentScreen('settings')} // Navigate to SettingsScreen
+          onOpenSettings={() => setCurrentScreen('howtoplay')} // Navigate to HowToPlayScreen
         />
       ) : currentScreen === 'difficulty' ? (
         <DifficultyScreen
@@ -23,8 +23,8 @@ export default function App() {
             setCurrentScreen('game'); // Navigate to GameScreen
           }}
         />
-      ) : currentScreen === 'settings' ? (
-        <SettingsScreen onBack={() => setCurrentScreen('start')} /> // Navigate back to StartScreen
+      ) : currentScreen === 'howtoplay' ? (
+        <HowToPlayScreen onBack={() => setCurrentScreen('start')} /> // Navigate back to StartScreen
       ) : (
         <GameScreen 
           difficulty={difficulty} 

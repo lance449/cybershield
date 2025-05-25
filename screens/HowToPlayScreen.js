@@ -170,4 +170,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default HowToPlayScreen;
+export default HowToPlayScreen; 
