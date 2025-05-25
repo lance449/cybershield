@@ -26,7 +26,10 @@ export default function App() {
       ) : currentScreen === 'settings' ? (
         <SettingsScreen onBack={() => setCurrentScreen('start')} /> // Navigate back to StartScreen
       ) : (
-        <GameScreen difficulty={difficulty} /> // Pass the difficulty to GameScreen
+        <GameScreen 
+          difficulty={difficulty} 
+          onBack={() => setCurrentScreen('start')} // Add onBack prop to return to start screen
+        />
       )}
     </SafeAreaView>
   );

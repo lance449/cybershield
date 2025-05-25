@@ -739,24 +739,8 @@ const GameScreen = ({ onBack, difficulty, navigation }) => {
     setUpdateProgress(0);
     
     // Return to start screen
-    try {
-      if (typeof onBack === 'function') {
-        onBack();
-      } else {
-        // If onBack is not available, try to navigate using navigation prop
-        if (navigation) {
-          navigation.navigate('StartScreen');
-        } else {
-          throw new Error('Navigation not available');
-        }
-      }
-    } catch (error) {
-      console.error('Navigation error:', error);
-      Alert.alert(
-        'Navigation Error',
-        'Unable to return to start screen. Please restart the app.',
-        [{ text: 'OK' }]
-      );
+    if (typeof onBack === 'function') {
+      onBack();
     }
   };
 
