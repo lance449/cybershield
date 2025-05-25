@@ -624,15 +624,8 @@ const GameScreen = ({ onBack, difficulty, navigation }) => {
   };
 
   const handlePasswordChange = () => {
-    if (newPassword === confirmPassword && newPassword.length >= 8) {
-      // Strong password - gain security
-      handleThreatNeutralized('password');
-      handleModalClose(currentMessage.device, true, 'Password changed successfully!');
-      setNewPassword('');
-      setConfirmPassword('');
-      setPasswordAttempts(0);
-    } else {
-      // Weak password - lose security
+    // Check if passwords match
+    if (newPassword !== confirmPassword) {
       const newAttempts = passwordAttempts + 1;
       setPasswordAttempts(newAttempts);
       
@@ -653,16 +646,102 @@ const GameScreen = ({ onBack, difficulty, navigation }) => {
           }]
         );
       } else {
-        // Just show warning for first two attempts
         Alert.alert(
-          '⚠️ Security Warning! ⚠️',
-          `Weak password detected!\n\n` +
+          '⚠️ Password Mismatch! ⚠️',
+          `The passwords do not match!\n\n` +
           `Attempts remaining: ${3 - newAttempts}\n` +
-          'Please use a stronger password (minimum 8 characters)',
+          'Please make sure both passwords are identical.',
           [{ text: 'Try Again' }]
         );
       }
+      return;
     }
+
+    // Check password strength
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumbers = /\d/.test(newPassword);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
+    const isLongEnough = newPassword.length >= 8;
+
+    if (!isLongEnough) {
+      const newAttempts = passwordAttempts + 1;
+      setPasswordAttempts(newAttempts);
+      
+      if (newAttempts >= 3) {
+        handleMistake();
+        Alert.alert(
+          '⚠️ Security Breach! ⚠️',
+          'Too many failed password attempts! The system has been compromised!\n\n' +
+          'Points Lost: -100\n' +
+          'Security Status: Critical (-10%)\n',
+          [{ 
+            text: 'Continue', 
+            onPress: () => {
+              setScore(prev => prev - 100);
+              handleModalClose(currentMessage.device, false, 'Security compromised due to multiple failed attempts!');
+              setPasswordAttempts(0);
+            }
+          }]
+        );
+      } else {
+        Alert.alert(
+          '⚠️ Weak Password! ⚠️',
+          `Your password is too short!\n\n` +
+          `Attempts remaining: ${3 - newAttempts}\n` +
+          'Password must be at least 8 characters long.',
+          [{ text: 'Try Again' }]
+        );
+      }
+      return;
+    }
+
+    // Check for password complexity
+    const missingRequirements = [];
+    if (!hasUpperCase) missingRequirements.push('uppercase letter');
+    if (!hasLowerCase) missingRequirements.push('lowercase letter');
+    if (!hasNumbers) missingRequirements.push('number');
+    if (!hasSpecialChar) missingRequirements.push('special character');
+
+    if (missingRequirements.length > 0) {
+      const newAttempts = passwordAttempts + 1;
+      setPasswordAttempts(newAttempts);
+      
+      if (newAttempts >= 3) {
+        handleMistake();
+        Alert.alert(
+          '⚠️ Security Breach! ⚠️',
+          'Too many failed password attempts! The system has been compromised!\n\n' +
+          'Points Lost: -100\n' +
+          'Security Status: Critical (-10%)\n',
+          [{ 
+            text: 'Continue', 
+            onPress: () => {
+              setScore(prev => prev - 100);
+              handleModalClose(currentMessage.device, false, 'Security compromised due to multiple failed attempts!');
+              setPasswordAttempts(0);
+            }
+          }]
+        );
+      } else {
+        Alert.alert(
+          '⚠️ Weak Password! ⚠️',
+          `Your password is not strong enough!\n\n` +
+          `Attempts remaining: ${3 - newAttempts}\n` +
+          'Password must contain at least one:\n' +
+          missingRequirements.map(req => `• ${req}`).join('\n'),
+          [{ text: 'Try Again' }]
+        );
+      }
+      return;
+    }
+
+    // If all checks pass, update the password
+    handleThreatNeutralized('password');
+    handleModalClose(currentMessage.device, true, 'Password changed successfully! Your network is now secure.');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordAttempts(0);
   };
 
   const checkGameStatus = () => {
