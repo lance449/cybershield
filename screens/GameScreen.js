@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Image, ImageBackground, StyleSheet, Dimensions, TouchableOpacity, Alert, Text, Modal, Button, TextInput, Animated, ScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -137,24 +138,84 @@ const GameScreen = ({ difficulty }) => {
   const [showFileIdentification, setShowFileIdentification] = useState(false);
   const [identifiedFiles, setIdentifiedFiles] = useState([]);
   const [currentThreatFiles, setCurrentThreatFiles] = useState({ files: [], threats: [] });
+  const [threatMeter, setThreatMeter] = useState(100);
+  const [isCriticalWarning, setIsCriticalWarning] = useState(false);
+  const [perfectGame, setPerfectGame] = useState(true);
+  const [recoveryTimer, setRecoveryTimer] = useState(null);
+  const [score, setScore] = useState(0);
+  const [threatsNeutralized, setThreatsNeutralized] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
+  const [gameTime, setGameTime] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [highScore, setHighScore] = useState(0);
+  const [showHighScoreModal, setShowHighScoreModal] = useState(false);
+  const [passwordAttempts, setPasswordAttempts] = useState(0);
+
+  // Load high score when component mounts
+  useEffect(() => {
+    const loadHighScore = async () => {
+      try {
+        const savedHighScore = await AsyncStorage.getItem('highScore');
+        if (savedHighScore) {
+          setHighScore(parseInt(savedHighScore));
+        }
+      } catch (error) {
+        console.error('Error loading high score:', error);
+      }
+    };
+    loadHighScore();
+  }, []);
+
+  // Save high score when game ends
+  const saveHighScore = async (newScore) => {
+    try {
+      if (newScore > highScore) {
+        await AsyncStorage.setItem('highScore', newScore.toString());
+        setHighScore(newScore);
+        return true;
+    }
+      return false;
+    } catch (error) {
+      console.error('Error saving high score:', error);
+      return false;
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setSpawnedDevices((prevDevices) => [
-        ...prevDevices,
-        {
-          id: Math.random().toString(),
-          type: Math.floor(Math.random() * devices.length),
-          x: Math.random() * (width - 100),
-          y: Math.random() * (height - 100),
-          hasThreat: true, // Only spawn devices with threats
-          scenarioIndex: Math.floor(Math.random() * laptopThreatScenarios.length), // Assign random scenario to laptop
-        },
-      ]);
+      setSpawnedDevices((prevDevices) => {
+        const newDevices = [
+          ...prevDevices,
+          {
+            id: Math.random().toString(),
+            type: Math.floor(Math.random() * devices.length),
+            x: Math.random() * (width - 100),
+            y: Math.random() * (height - 100),
+            hasThreat: true, // Only spawn devices with threats
+            scenarioIndex: Math.floor(Math.random() * laptopThreatScenarios.length), // Assign random scenario to laptop
+          },
+        ];
+
+        // Check for too many simultaneous devices
+        if (newDevices.length >= 50) {
+          handleMistake('minor'); // Apply a minor penalty
+          // Remove oldest device to maintain performance
+          return newDevices.slice(1);
+        }
+
+        return newDevices;
+      });
     }, difficulty === 'easy' ? 7000 : difficulty === 'medium' ? 5000 : 3000);
 
     return () => clearInterval(interval);
   }, [difficulty]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setGameTime(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const resetStates = () => {
     setScanProgress(0);
@@ -236,10 +297,11 @@ const GameScreen = ({ difficulty }) => {
 
     const updateInterval = setInterval(() => {
       setUpdateProgress(prev => {
-        const newProgress = prev + 0.05; // Increment by 5% each time
+        const newProgress = prev + 0.05;
         if (newProgress >= 1) {
           clearInterval(updateInterval);
           setIsUpdating(false);
+          handleThreatNeutralized('update');
           Alert.alert(
             'Update Complete',
             'Antivirus has been successfully updated to the latest version.',
@@ -264,18 +326,40 @@ const GameScreen = ({ difficulty }) => {
     }, 200);
   };
 
+  const calculatePoints = (action, isCorrect) => {
+    let points = 0;
+    switch (action) {
+      case 'threat_identified':
+        points = isCorrect ? 200 : -100; // Increased points
+        break;
+      case 'phishing_identified':
+        points = isCorrect ? 300 : -150; // Increased points
+        break;
+      case 'password_secured':
+        points = isCorrect ? 400 : -200; // Increased points
+        break;
+      case 'update_installed':
+        points = isCorrect ? 100 : -50; // Increased points
+        break;
+    }
+    return points;
+  };
+
   const handleFileIdentification = (file, action) => {
-    // Check if this file is already identified
     const isAlreadyIdentified = identifiedFiles.some(f => f.id === file.id);
     
     if (!isAlreadyIdentified) {
-      // Add only the current file to identified files
+      const isCorrect = (currentThreatFiles.threats.some(t => t.id === file.id) && action === 'remove') ||
+                       (!currentThreatFiles.threats.some(t => t.id === file.id) && action === 'ignore');
+      
+      const points = calculatePoints('threat_identified', isCorrect);
+      setScore(prev => prev + points);
+      if (!isCorrect) setMistakes(prev => prev + 1);
+      
       setIdentifiedFiles(prevFiles => {
         const updatedFiles = [...prevFiles, { ...file, action }];
         
-        // Check if all files have been identified after this update
         if (updatedFiles.length === currentThreatFiles.files.length) {
-          // Calculate correct identifications
           const correctIdentifications = updatedFiles.filter(f => {
             const isThreat = currentThreatFiles.threats.some(t => t.id === f.id);
             return (isThreat && f.action === 'remove') || (!isThreat && f.action === 'ignore');
@@ -284,7 +368,13 @@ const GameScreen = ({ difficulty }) => {
           const totalFiles = currentThreatFiles.files.length;
           const accuracy = Math.round((correctIdentifications / totalFiles) * 100);
           
-          // Reset states
+          if (accuracy >= 80) {
+            setThreatsNeutralized(prev => prev + 1);
+          }
+          
+          // Check win/lose conditions
+          checkGameStatus();
+          
           setTimeout(() => {
             setShowFileIdentification(false);
             setIdentifiedFiles([]);
@@ -294,15 +384,13 @@ const GameScreen = ({ difficulty }) => {
             setShowElementIdentification(false);
             setHighlightedWord(null);
             
-            // Close modal and show results
             handleModalClose(
               currentMessage.device,
               true,
-              `Scan completed!\nCorrectly identified ${correctIdentifications} out of ${totalFiles} files (${accuracy}% accuracy).`
+              `Scan completed!\nCorrectly identified ${correctIdentifications} out of ${totalFiles} files (${accuracy}% accuracy).\nPoints earned: ${points}`
             );
           }, 500);
         }
-        
         return updatedFiles;
       });
     }
@@ -335,17 +423,18 @@ const GameScreen = ({ difficulty }) => {
   const checkIdentifiedElements = () => {
     if (!currentMessage?.phishingElements) return false;
     
-    // Check if all phishing elements have been identified
     const allElementsIdentified = currentMessage.phishingElements.every(element =>
       identifiedElements.some(identified => identified.text === element.text)
     );
 
     if (allElementsIdentified) {
+      handleThreatNeutralized('phishing');
       handleModalClose(currentMessage.device, true, 'Great job! You identified all suspicious elements!');
     } else {
+      handleMistake('moderate');
       Alert.alert(
-        'Not Complete',
-        'Please identify all suspicious elements in the email.',
+        'Security Breach!',
+        'Missed phishing elements! Security compromised!',
         [{ text: 'OK' }]
       );
     }
@@ -478,16 +567,222 @@ const GameScreen = ({ difficulty }) => {
     }, 140);
   };
 
+  const updateThreatMeter = (change, isRecovery = false) => {
+    setThreatMeter(prev => {
+      const newValue = Math.max(0, Math.min(100, prev + change));
+      
+      // Handle critical warning
+      if (newValue < 50 && !isCriticalWarning) {
+        setIsCriticalWarning(true);
+        // Flash warning for 2 seconds
+        setTimeout(() => setIsCriticalWarning(false), 2000);
+      }
+      
+      // Handle perfect game status
+      if (newValue < 100) {
+        setPerfectGame(false);
+      }
+      
+      // Handle recovery bonus
+      if (isRecovery && newValue >= 70) {
+        const recoveryBonus = Math.floor((newValue - 70) / 5) * 50; // Bonus points for recovery
+        setScore(prev => prev + recoveryBonus);
+      }
+      
+      return newValue;
+    });
+  };
+
+  const handleMistake = (severity) => {
+    let meterLoss;
+    switch (severity) {
+      case 'critical': // Major security breach
+        meterLoss = -30;
+        break;
+      case 'moderate': // Moderate security risk
+        meterLoss = -15;
+        break;
+      case 'minor': // Minor security issue
+        meterLoss = -5;
+        break;
+      default:
+        meterLoss = -10;
+    }
+    
+    updateThreatMeter(meterLoss);
+    
+    // Start recovery timer
+    if (recoveryTimer) clearTimeout(recoveryTimer);
+    const timer = setTimeout(() => {
+      // If player hasn't fixed the issue within 10 seconds, additional penalty
+      updateThreatMeter(-5);
+    }, 10000);
+    setRecoveryTimer(timer);
+  };
+
+  const handleThreatNeutralized = (threatType) => {
+    let meterGain;
+    switch (threatType) {
+      case 'malware':
+        meterGain = 25;
+        break;
+      case 'phishing':
+        meterGain = 20;
+        break;
+      case 'password':
+        meterGain = 15;
+        break;
+      case 'update':
+        meterGain = 10;
+        break;
+      default:
+        meterGain = 10;
+    }
+    
+    updateThreatMeter(meterGain, true);
+    
+    // Check for perfect game bonus
+    if (perfectGame && threatMeter === 100) {
+      const perfectBonus = 2000; // Increased from 1000 to 2000
+      setScore(prev => prev + perfectBonus);
+      Alert.alert(
+        '🌟 Perfect Security! 🌟',
+        `You've maintained perfect security!\n
+        +${perfectBonus} bonus points!`,
+        [{ text: 'Awesome!' }]
+      );
+    }
+  };
+
+  const handlePasswordChange = () => {
+    if (newPassword === confirmPassword && newPassword.length >= 8) {
+      // Strong password - gain security
+      handleThreatNeutralized('password');
+      handleModalClose(currentMessage.device, true, 'Password changed successfully!');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordAttempts(0); // Reset attempts on success
+    } else {
+      // Weak password - lose security
+      const newAttempts = passwordAttempts + 1;
+      setPasswordAttempts(newAttempts);
+      
+      if (newAttempts >= 3) {
+        // Game over after 3 failed attempts
+        handleMistake('critical');
+        Alert.alert(
+          '⚠️ Security Breach! ⚠️',
+          'Too many failed password attempts! The system has been compromised!\n\n' +
+          'Points Lost: -500\n' +
+          'Security Status: Critical',
+          [{ 
+            text: 'Continue', 
+            onPress: () => {
+              setScore(prev => prev - 500);
+              handleModalClose(currentMessage.device, false, 'Security compromised due to multiple failed attempts!');
+              setPasswordAttempts(0);
+            }
+          }]
+        );
+      } else {
+        handleMistake('moderate');
+        Alert.alert(
+          '⚠️ Security Warning! ⚠️',
+          `Weak password detected! Security compromised!\n\n` +
+          `Attempts remaining: ${3 - newAttempts}\n` +
+          'Please use a stronger password (minimum 8 characters)',
+          [{ text: 'Try Again' }]
+        );
+      }
+    }
+  };
+
+  const checkGameStatus = () => {
+    // Win conditions
+    if (threatsNeutralized >= 10 && score >= 2000) { // Changed from 5 to 10 threats
+      setGameOver(true);
+      const isNewHighScore = saveHighScore(score);
+      setShowHighScoreModal(true);
+      Alert.alert(
+        '🎉 Victory! 🎉',
+        `Congratulations! You've successfully defended the grid!\n\n
+        Final Score: ${score}\n
+        Threats Neutralized: ${threatsNeutralized}/10\n
+        Mistakes Made: ${mistakes}/10\n
+        Time Elapsed: ${Math.floor(gameTime / 60)}:${(gameTime % 60).toString().padStart(2, '0')}\n\n
+        ${isNewHighScore ? '🏆 NEW HIGH SCORE! 🏆' : ''}`,
+        [{ text: 'Play Again', onPress: () => resetGame() }]
+      );
+    }
+    
+    // Lose conditions
+    if (mistakes >= 10 || score < 0) { // Changed from 5 to 10 mistakes
+      setGameOver(true);
+      Alert.alert(
+        'Game Over',
+        `The grid has been compromised!\n\n
+        Final Score: ${score}\n
+        Threats Neutralized: ${threatsNeutralized}/10\n
+        Mistakes Made: ${mistakes}/10\n
+        Time Elapsed: ${Math.floor(gameTime / 60)}:${(gameTime % 60).toString().padStart(2, '0')}`,
+        [{ text: 'Try Again', onPress: () => resetGame() }]
+      );
+    }
+  };
+
+  const resetGame = () => {
+    setScore(0);
+    setThreatsNeutralized(0);
+    setMistakes(0);
+    setGameTime(0);
+    setGameOver(false);
+    setSpawnedDevices([]);
+  };
+
   return (
     <ImageBackground source={require('../assets/game_background.png')} style={styles.background}>
-      {spawnedDevices.map((device) => (
-        <TouchableOpacity key={device.id} onPress={() => handleDeviceClick(device)}>
-          <Image
-            source={devices[device.type].threat} // Only display threat icons
-            style={[styles.device, { top: device.y, left: device.x }]}
+      <View style={styles.scoreContainer}>
+        <View style={styles.scoreContent}>
+          <Text style={styles.scoreText}>Score: {score}</Text>
+          <Text style={styles.scoreText}>Threats: {threatsNeutralized}/10</Text>
+          <Text style={styles.scoreText}>Mistakes: {mistakes}/10</Text>
+          <Text style={styles.scoreText}>Time: {Math.floor(gameTime / 60)}:{(gameTime % 60).toString().padStart(2, '0')}</Text>
+          <Text style={styles.highScoreText}>High Score: {highScore}</Text>
+        </View>
+      </View>
+      <View style={styles.threatMeterContainer}>
+        <View style={styles.threatMeter}>
+          <View 
+            style={[
+              styles.threatMeterFill,
+              { 
+                width: `${threatMeter}%`,
+                backgroundColor: threatMeter >= 70 ? '#4CD964' : 
+                               threatMeter >= 40 ? '#FFD700' : 
+                               '#FF3B30'
+              }
+            ]} 
           />
-        </TouchableOpacity>
-      ))}
+        </View>
+        <Text style={styles.threatMeterText}>
+          Security Status: {threatMeter}%
+        </Text>
+        {isCriticalWarning && (
+          <View style={styles.criticalWarning}>
+            <Text style={styles.criticalWarningText}>CRITICAL WARNING!</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.gameArea}>
+        {spawnedDevices.map((device) => (
+          <TouchableOpacity key={device.id} onPress={() => handleDeviceClick(device)}>
+            <Image
+              source={devices[device.type].threat}
+              style={[styles.device, { top: device.y, left: device.x }]}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <Modal
         animationType="slide"
@@ -625,12 +920,14 @@ const GameScreen = ({ difficulty }) => {
                     </View>
                   </View>
                 ) : currentMessage.title === 'Change Wi-Fi Password' ? (
-                  // Modem password change view
                   <View style={styles.phoneFrame}>
                     <View style={styles.phoneHeader}>
                       <Text style={styles.headerText}>Wi-Fi Security</Text>
                     </View>
                     <View style={styles.passwordContainer}>
+                      <Text style={styles.passwordAttemptsText}>
+                        Attempts remaining: {3 - passwordAttempts}
+                      </Text>
                       <TextInput
                         style={styles.input}
                         placeholder="Enter new password"
@@ -646,26 +943,21 @@ const GameScreen = ({ difficulty }) => {
                         onChangeText={setConfirmPassword}
                       />
                       <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: '#4CD964', width: '100%' }]}
-                        onPress={() => {
-                          if (newPassword === confirmPassword && newPassword.length >= 8) {
-                            handleModalClose(currentMessage.device, true, 'Password changed successfully!');
-                            setNewPassword('');
-                            setConfirmPassword('');
-                          } else {
-                            Alert.alert(
-                              'Error',
-                              'Passwords must match and be at least 8 characters long'
-                            );
+                        style={[
+                          styles.actionButton, 
+                          { 
+                            backgroundColor: '#4CD964',
+                            opacity: passwordAttempts >= 3 ? 0.5 : 1
                           }
-                        }}
+                        ]}
+                        onPress={handlePasswordChange}
+                        disabled={passwordAttempts >= 3}
                       >
                         <Text style={styles.buttonText}>Change Password</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
                 ) : (
-                  // Email phishing detection view
                   <>
                     <View style={styles.phoneFrame}>
                       <View style={styles.phoneHeader}>
@@ -775,6 +1067,7 @@ const GameScreen = ({ difficulty }) => {
                               checkIdentifiedElements();
                             }
                           } else {
+                            handleMistake('moderate');
                             handleModalClose(currentMessage.device, false, 
                               'Incorrect! This was a legitimate message.');
                           }
@@ -791,6 +1084,7 @@ const GameScreen = ({ difficulty }) => {
                             handleModalClose(currentMessage.device, true, 
                               'Correct! This was a legitimate message.');
                           } else {
+                            handleMistake('moderate');
                             handleModalClose(currentMessage.device, false, 
                               'Incorrect! This was a phishing attempt. Try to spot the suspicious elements.');
                           }
@@ -845,8 +1139,8 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   device: {
-    width: width * 0.3,
-    height: width * 0.3,
+    width: width * 0.25,
+    height: width * 0.25,
     position: 'absolute',
   },
   modalView: {
@@ -1064,37 +1358,50 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
   },
   alertModalContent: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: width * 0.04,
-    width: '80%',
+    borderRadius: 20,
+    padding: width * 0.05,
+    width: '90%',
     alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   alertTitle: {
-    fontSize: width * 0.04,
+    fontSize: width * 0.05,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: height * 0.01,
-  },
-  alertMessage: {
-    fontSize: width * 0.035,
-    color: '#666',
     marginBottom: height * 0.02,
     textAlign: 'center',
   },
+  alertMessage: {
+    fontSize: width * 0.04,
+    color: '#666',
+    marginBottom: height * 0.03,
+    textAlign: 'center',
+    lineHeight: width * 0.06,
+  },
   alertButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     width: '100%',
+    marginTop: height * 0.02,
   },
   alertButton: {
-    paddingVertical: height * 0.01,
-    paddingHorizontal: width * 0.04,
-    borderRadius: 5,
-    minWidth: width * 0.2,
+    paddingVertical: height * 0.015,
+    paddingHorizontal: width * 0.06,
+    borderRadius: 10,
+    minWidth: width * 0.25,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.22,
+    shadowRadius: 2.22,
   },
   threatFilesList: {
     maxHeight: height * 0.4,
@@ -1150,6 +1457,108 @@ const styles = StyleSheet.create({
   },
   threatFileStatusText: {
     fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  threatMeterContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  threatMeter: {
+    height: 20,
+    backgroundColor: '#333',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 5,
+  },
+  threatMeterFill: {
+    height: '100%',
+    transition: 'width 0.3s ease-in-out',
+  },
+  threatMeterText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  criticalWarning: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255, 59, 48, 0.8)',
+    padding: 10,
+    borderRadius: 5,
+    animation: 'flash 1s infinite',
+  },
+  criticalWarningText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  securityIndicator: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: 10,
+    borderRadius: 5,
+    zIndex: 1001,
+  },
+  securityIndicatorText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  scoreContainer: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 10,
+    borderRadius: 10,
+    zIndex: 1000,
+    maxWidth: width * 0.3,
+  },
+  scoreContent: {
+    alignItems: 'flex-start',
+  },
+  scoreText: {
+    color: '#fff',
+    fontSize: 14,
+    marginBottom: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    fontWeight: 'bold',
+  },
+  highScoreText: {
+    color: '#FFD700',
+    fontSize: 16,
+    marginTop: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    fontWeight: 'bold',
+  },
+  gameArea: {
+    flex: 1,
+    marginTop: height * 0.15, // Add space for the score and threat meter
+    marginBottom: height * 0.1, // Add space at the bottom
+    position: 'relative',
+  },
+  passwordAttemptsText: {
+    fontSize: width * 0.035,
+    color: '#FF3B30',
+    marginBottom: height * 0.01,
     fontWeight: 'bold',
     textAlign: 'center',
   },
